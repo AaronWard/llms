@@ -1,12 +1,38 @@
-"""
+""" 
+This script demonstrates the capabilities of the Crawl4AI library by performing two distinct examples:
 
+- **Standard Crawl Example**
+  - Crawl Information
+  - Raw HTML (first 300 chars)
+  - Cleaned HTML (first 300 chars)
+  - Markdown Generation Result, which includes:
+    - Raw Markdown (first 300 chars)
+    - Markdown with Citations
+    - References Markdown
+    - Fit Markdown (first 300 chars, if available)
+    - Fit HTML (first 300 chars, if available)
+  - Media Extracted
+  - Links Extracted
+  - Downloaded Files
+  - Screenshot and PDF
+  - Additional Fields (extracted content, metadata, error message, session ID, SSL certificate)
+
+- **Structured Extraction Example**
+  - Structured Extraction Output
+
+All title headers in the output are printed in ANSI green to enhance readability.
 """
 import asyncio
+import base64
 import json
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
+
+def print_title(title: str):
+    # ANSI escape sequence for bright green: \033[92m, reset: \033[0m
+    print(f"\033[92m{title}\033[0m")
 
 async def crawl_standard_page():
     """
@@ -17,7 +43,8 @@ async def crawl_standard_page():
       - Screenshot and PDF (if enabled)
       - Response headers, status code, and SSL certificate (if available)
     """
-    print("=== Standard Crawl Example ===\n")
+    print_title("=== Standard Crawl Example ===")
+    print()
 
     # Set up a browser configuration (verbose logging enabled)
     browser_config = BrowserConfig(verbose=True)
@@ -44,6 +71,7 @@ async def crawl_standard_page():
         result = await crawler.arun(url="https://docs.ag2.ai/docs/contributor-guide/contributing", config=run_config)
 
         # Print general crawl result info
+        print_title("Crawl Information")
         print("Crawl URL:", result.url)
         print("Success:", result.success)
         print("Status Code:", result.status_code)
@@ -52,41 +80,48 @@ async def crawl_standard_page():
         print()
 
         # Display HTML outputs
-        print("=== Raw HTML (first 300 chars) ===")
+        print_title("Raw HTML (first 300 chars)")
         print(result.html[:300])
-        print("\n=== Cleaned HTML (first 300 chars) ===")
+        print()
+
+        print_title("Cleaned HTML (first 300 chars)")
         print(result.cleaned_html[:300] if result.cleaned_html else "None")
         print()
 
         # Display Markdown outputs (detailed markdown_v2 output)
+        print_title("Markdown Generation Result")
         if result.markdown_v2:
             md = result.markdown_v2
-            print("=== Markdown Generation Result ===")
-            print("Raw Markdown (first 300 chars):")
+            print_title("Raw Markdown (first 300 chars)")
             print(md.raw_markdown[:300])
-            print("\nMarkdown with Citations:")
+            print()
+            print_title("Markdown with Citations")
             print(md.markdown_with_citations)
-            print("\nReferences Markdown:")
+            print()
+            print_title("References Markdown")
             print(md.references_markdown)
+            print()
             if md.fit_markdown:
-                print("\nFit Markdown (first 300 chars):")
+                print_title("Fit Markdown (first 300 chars)")
                 print(md.fit_markdown[:300])
+                print()
             if md.fit_html:
-                print("\nFit HTML (first 300 chars):")
+                print_title("Fit HTML (first 300 chars)")
                 print(md.fit_html[:300])
+                print()
         else:
             print("No markdown_v2 output available.")
         print()
 
         # Display media and links information
-        print("=== Media Extracted ===")
+        print_title("Media Extracted")
         for media_type, items in result.media.items():
             print(f"{media_type.capitalize()}: {len(items)} item(s)")
             for item in items:
                 print(" -", item.get("src", "N/A"))
         print()
 
-        print("=== Links Extracted ===")
+        print_title("Links Extracted")
         for link_type, links in result.links.items():
             print(f"{link_type.capitalize()} Links: {len(links)} item(s)")
             for link in links:
@@ -94,15 +129,20 @@ async def crawl_standard_page():
         print()
 
         # Downloaded files (if any)
+        print_title("Downloaded Files")
         if result.downloaded_files:
-            print("Downloaded Files:", result.downloaded_files)
+            print(result.downloaded_files)
         else:
             print("No files downloaded.")
         print()
 
         # Screenshot (base64 string) and PDF (raw bytes)
+        print_title("Screenshot and PDF")
         if result.screenshot:
-            print("Screenshot captured (length of base64 string):", len(result.screenshot))
+            print("Screenshot captured")
+            screenshot_bytes = base64.b64decode(result.screenshot)
+            with open("./output/screenshot.png", "wb") as screenshot_file:
+                screenshot_file.write(screenshot_bytes)
         else:
             print("No screenshot available.")
         if result.pdf:
@@ -115,6 +155,7 @@ async def crawl_standard_page():
         print()
 
         # Additional fields
+        print_title("Additional Fields")
         if result.extracted_content:
             print("Extracted Content:")
             print(result.extracted_content)
@@ -131,15 +172,17 @@ async def crawl_standard_page():
             print("Session ID:", result.session_id)
         if result.ssl_certificate:
             print("SSL Certificate Info:", result.ssl_certificate)
-        print("\n--- End of Standard Crawl ---\n")
-
+        print()
+        print_title("=== End of Standard Crawl ===")
+        print("\n")
 
 async def structured_extraction_example():
     """
     Demonstrate structured extraction using a CSS-based strategy on raw HTML.
     The structured data is returned in the 'extracted_content' field.
     """
-    print("=== Structured Extraction Example ===\n")
+    print_title("=== Structured Extraction Example ===")
+    print()
 
     # Define a simple extraction schema
     schema = {
@@ -164,18 +207,19 @@ async def structured_extraction_example():
         result = await crawler.arun(url="raw://" + raw_html, config=run_config)
 
         # The extracted_content should be a JSON string containing our structured data.
+        print_title("Structured Extraction Output")
         if result.extracted_content:
             try:
                 data = json.loads(result.extracted_content)
-                print("Structured Extraction Output:")
                 print(json.dumps(data, indent=2))
             except json.JSONDecodeError:
                 print("Error decoding extracted content as JSON.")
         else:
             print("No extracted content found.")
 
-    print("\n--- End of Structured Extraction Example ---\n")
-
+    print()
+    print_title("=== End of Structured Extraction Example ===")
+    print("\n")
 
 async def main():
     await crawl_standard_page()
