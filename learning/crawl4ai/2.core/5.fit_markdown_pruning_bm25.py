@@ -1,99 +1,144 @@
+""" 
+PruningContentFilter and BM25ContentFilter are two content filters that can be used to
+
+RESULTS:
+==========
+Despite testing with many different parameter combinations, the PruningContentFilter and BM25ContentFilter
+don't seem to produce different results for the given URL. This could be due to the nature of the content. 
+
+"""
 import asyncio
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
 from crawl4ai.content_filter_strategy import PruningContentFilter, BM25ContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
+# Target URL for testing.
+URL = "https://docs.ag2.ai/docs/blog/2023-06-28-MathChat/index"
+
 def print_title(title: str):
     """Prints the given title in bright ANSI green for clear separation."""
     print(f"\033[92m{title}\033[0m")
 
-async def fit_markdown_with_pruning():
+async def test_pruning_parameters():
     """
-    Demonstrates fit markdown generation using PruningContentFilter.
+    Tests several parameter combinations for PruningContentFilter and compares results.
     
-    This filter discards low-value text blocks based on factors such as text density,
-    link density, and word count. The output is a pruned version of the full markdown,
-    focusing on the most 'dense' or important text.
+    For each parameter set, the crawler generates:
+      - raw_markdown (full conversion)
+      - fit_markdown (filtered output)
     
-    Steps:
-    1. Create a PruningContentFilter with a dynamic threshold and minimum word threshold.
-    2. Insert this filter into a DefaultMarkdownGenerator.
-    3. Pass the generator to CrawlerRunConfig.
-    4. Crawl a target website and print both the raw and pruned markdown lengths.
+    It then prints:
+      - The lengths of raw and fit markdown.
+      - A snippet of the fit markdown (or a fallback snippet from the raw markdown if fit_markdown is empty).
+    
+    If all tests produce an empty fit_markdown, it means the filter’s heuristics determine that
+    none of the content blocks meet the criteria for being “dense” or “relevant” on this page.
     """
-    print_title("Fit Markdown with PruningContentFilter")
+    print_title("Testing Various PruningContentFilter Parameters")
     
-    # Step 1: Create a pruning filter.
-    prune_filter = PruningContentFilter(
-        threshold=0.1,           # Lower values retain more content; higher values prune more aggressively.
-        threshold_type="dynamic", # "dynamic" allows the threshold to adjust based on content characteristics.
-        min_word_threshold=2      # Ignore content blocks with fewer than 5 words.
-    )
+    # List of parameter sets to test.
+    pruning_params_list = [
+        {"threshold": 0.1, "min_word_threshold": 2},
+        {"threshold": 0.5, "min_word_threshold": 22},
+        {"threshold": 0.9, "min_word_threshold": 55},
+    ]
     
-    # Step 2: Create a markdown generator that uses the pruning filter.
-    md_generator = DefaultMarkdownGenerator(content_filter=prune_filter)
-    
-    # Step 3: Configure the crawler run to use this markdown generator.
-    config = CrawlerRunConfig(
-        markdown_generator=md_generator
-    )
-    
-    # Step 4: Crawl a target website (here, Hacker News for demonstration).
-    async with AsyncWebCrawler() as crawler:
-        result = await crawler.arun(url="https://news.ycombinator.com", config=config)
-        if result.success:
-            # Print the lengths of raw markdown versus the pruned ("fit") markdown.
-            print("Raw Markdown length:", len(result.markdown_v2.raw_markdown))
-            print("Fit Markdown length:", len(result.markdown_v2.fit_markdown))
-        else:
-            print("Error during crawl with PruningContentFilter:", result.error_message)
-    print()  # Blank line for separation.
+    for params in pruning_params_list:
+        print_title(f"Pruning Params: threshold={params['threshold']}, min_word_threshold={params['min_word_threshold']}")
+        
+        # Create the pruning filter with current parameters.
+        prune_filter = PruningContentFilter(
+            threshold=params["threshold"],
+            threshold_type="fixed",  # Uses dynamic threshold based on content characteristics. # fixed
+            min_word_threshold=params["min_word_threshold"]
+        )
+        
+        # Create a markdown generator that uses the pruning filter.
+        md_generator = DefaultMarkdownGenerator(content_filter=prune_filter)
+        
+        # Configure the crawler run.
+        config = CrawlerRunConfig(
+            markdown_generator=md_generator
+        )
+        
+        async with AsyncWebCrawler() as crawler:
+            result = await crawler.arun(url=URL, config=config)
+            if result.success:
+                raw_len = len(result.markdown_v2.raw_markdown)
+                fit_len = len(result.markdown_v2.fit_markdown)
+                print("Raw Markdown length:", raw_len)
+                print("Fit Markdown length:", fit_len)
+                if fit_len == 0:
+                    print("No filtered content produced. Showing raw snippet:")
+                    print(result.markdown_v2.raw_markdown[:300])
+                else:
+                    print("Snippet of Fit Markdown:")
+                    print(result.markdown_v2.fit_markdown[:300])
+            else:
+                print("Error during crawl with PruningContentFilter:", result.error_message)
+        print("-" * 80)
 
-async def fit_markdown_with_bm25():
+async def test_bm25_parameters():
     """
-    Demonstrates fit markdown generation using BM25ContentFilter.
+    Tests several parameter combinations for BM25ContentFilter and compares results.
     
-    BM25ContentFilter uses a classical text ranking algorithm to keep only the text
-    blocks that are highly relevant to a specific query (e.g., "startup fundraising tips").
-    This results in a filtered markdown that emphasizes the content most relevant to that query.
+    For each parameter set, the crawler generates:
+      - raw_markdown (full conversion)
+      - fit_markdown (filtered output based on query relevance)
     
-    Steps:
-    1. Create a BM25ContentFilter with a specific user query and threshold.
-    2. Insert this filter into a DefaultMarkdownGenerator.
-    3. Pass the generator to CrawlerRunConfig.
-    4. Crawl a target website and print the filtered markdown output.
+    It then prints:
+      - The lengths of raw and fit markdown.
+      - A snippet of the filtered output (or a fallback snippet from raw markdown if empty).
+    
+    If the filtered output is empty for all settings, then the BM25 algorithm deems no text blocks as
+    sufficiently relevant for the provided query on this page.
     """
-    print_title("Fit Markdown with BM25ContentFilter")
+    print_title("Testing Various BM25ContentFilter Parameters")
     
-    # Step 1: Create a BM25 filter with a target query.
-    bm25_filter = BM25ContentFilter(
-        user_query="Markdown",  # Focus on content relevant to this query.
-        bm25_threshold=0.1  # Higher thresholds return fewer, more relevant text blocks.
-    )
+    # List of parameter sets to test.
+    bm25_params_list = [
+        {"user_query": "apache", "bm25_threshold": 0.01},
+        {"user_query": "apache", "bm25_threshold": 0.5},
+        {"user_query": "apache", "bm25_threshold": 0.9},
+    ]
     
-    # Step 2: Create a markdown generator that uses the BM25 filter.
-    md_generator = DefaultMarkdownGenerator(content_filter=bm25_filter)
-    
-    # Step 3: Configure the crawler run to use this markdown generator.
-    config = CrawlerRunConfig(
-        markdown_generator=md_generator
-    )
-    
-    # Step 4: Crawl the target website (using Hacker News as an example).
-    async with AsyncWebCrawler() as crawler:
-        result = await crawler.arun(url="https://news.ycombinator.com", config=config)
-        if result.success:
-            # Print the filtered ("fit") markdown that highlights content relevant to the query.
-            print("Fit Markdown (BM25 query-based):")
-            print(result.markdown_v2.fit_markdown)
-        else:
-            print("Error during crawl with BM25ContentFilter:", result.error_message)
-    print()  # Blank line for separation.
+    for params in bm25_params_list:
+        print_title(f"BM25 Params: user_query='{params['user_query']}', bm25_threshold={params['bm25_threshold']}")
+        
+        # Create the BM25 filter with current parameters.
+        bm25_filter = BM25ContentFilter(
+            user_query=params["user_query"],
+            bm25_threshold=params["bm25_threshold"]
+        )
+        
+        # Create a markdown generator that uses the BM25 filter.
+        md_generator = DefaultMarkdownGenerator(content_filter=bm25_filter)
+        
+        # Configure the crawler run.
+        config = CrawlerRunConfig(
+            markdown_generator=md_generator
+        )
+        
+        async with AsyncWebCrawler() as crawler:
+            result = await crawler.arun(url=URL, config=config)
+            if result.success:
+                raw_len = len(result.markdown_v2.raw_markdown)
+                fit_len = len(result.markdown_v2.fit_markdown)
+                print("Raw Markdown length:", raw_len)
+                print("Fit Markdown length:", fit_len)
+                if fit_len == 0:
+                    print("No filtered content produced. Showing raw snippet:")
+                    print(result.markdown_v2.raw_markdown[:300])
+                else:
+                    print("Snippet of Fit Markdown:")
+                    print(result.markdown_v2.fit_markdown[:300])
+            else:
+                print("Error during crawl with BM25ContentFilter:", result.error_message)
+        print("-" * 80)
 
 async def main():
-    # Run both filtering examples sequentially.
-    await fit_markdown_with_pruning()
-    await fit_markdown_with_bm25()
+    await test_pruning_parameters()
+    await test_bm25_parameters()
 
 if __name__ == "__main__":
     asyncio.run(main())
